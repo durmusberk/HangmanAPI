@@ -7,6 +7,7 @@ using Hangman.Data;
 using Hangman.Models;
 using Hangman.Models.RequestModels;
 using Hangman.Models.ResponseModels;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
@@ -32,7 +33,8 @@ namespace Hangman.Controllers
 
         #region GetAllUsers
 
-        [HttpGet("Users")]
+        [HttpGet("Users"),Authorize(Roles ="Admin")]
+
         public  ActionResult<List<User>> GetUsers()
         {
             var list =  _db.Users.ToList();
@@ -66,6 +68,7 @@ namespace Hangman.Controllers
                 Username= request.Username,
                 PasswordHash=passwordHash,
                 PasswordSalt=passwordSalt,
+                Role = request.Role,
                 CreatedDate = DateTime.Now
             };
 
@@ -120,7 +123,11 @@ namespace Hangman.Controllers
         private string CreateToken(User user)
         {
 
-            List<Claim> claims = new List<Claim> { new Claim(ClaimTypes.Name, user.Username) };
+            List<Claim> claims = new List<Claim> 
+            { 
+                new Claim(ClaimTypes.Name, user.Username),
+                new Claim(ClaimTypes.Role, user.Role == 0 ? "User" : "Admin")
+            };
 
             var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(
                 _configuration.GetSection("AppSettings:Token").Value

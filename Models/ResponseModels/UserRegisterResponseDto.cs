@@ -4,6 +4,7 @@
     {
 
         public string Username { get; set; }
+        public int Role { get; set; }
         public DateTime CreatedDate { get; set; }
 
 
