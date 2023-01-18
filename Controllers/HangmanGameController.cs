@@ -54,7 +54,8 @@ namespace Hangman.Controllers
                     GameId = item.GameId,
                     DashedWord = CreateDashedWord(item.Word,CSVToIntArray(item.GuessedChars)),
                     WrongGuessCount = item.WrongGuessCount,
-                    RemainingGuessCount = item.Word.Length - item.WrongGuessCount - item.Word.Count(Char.IsWhiteSpace)
+                    RemainingGuessCount = item.Word.Length - item.WrongGuessCount - item.Word.Count(Char.IsWhiteSpace),
+                    Difficulty = item.Difficulty
                 };
                 response_list.Add(response);
             }
@@ -64,7 +65,6 @@ namespace Hangman.Controllers
         }
 
         #endregion
-
 
         #region StartGame
 
@@ -80,7 +80,7 @@ namespace Hangman.Controllers
             var Random_Word = _db.Words.OrderBy(r => Guid.NewGuid()).Take(1).FirstOrDefault();
             int WordCount = Random_Word.Name.Split(" ").Length;
             var GuessedChars = new int[Random_Word.Name.Length];
-            var GuessedCharsToCSV = string.Join(",", GuessedChars);
+            var GuessedCharsToCSV = IntArrayToCSV(GuessedChars);
             var DashedWord = CreateDashedWord(Random_Word.Name, GuessedChars);
 
             int LastGameId;
@@ -102,7 +102,8 @@ namespace Hangman.Controllers
                 WrongGuessCount = 0,
                 DateStarted = DateTime.Now,
                 GuessedChars = GuessedCharsToCSV,
-                GameId = LastGameId + 1
+                GameId = LastGameId + 1,
+                Difficulty = Random_Word.Difficulty
             };
 
             _db.Sessions.Add(new_session);
@@ -183,10 +184,8 @@ namespace Hangman.Controllers
 
         #region Methods
 
-        private int[] CSVToIntArray(string text)
-        {
-            return Array.ConvertAll(text.Split(','), int.Parse);
-        }
+        private int[] CSVToIntArray(string text) => Array.ConvertAll(text.Split(','), int.Parse);
+        private string IntArrayToCSV(int[] array) => string.Join(",", array);
         private string CreateDashedWord(string name, int[] guessedChars)
         {
             StringBuilder stringBuilder = new StringBuilder();

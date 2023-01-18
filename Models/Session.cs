@@ -21,10 +21,8 @@ namespace Hangman.Models
         [Required]
         public DateTime DateStarted { get; set; }
         public DateTime DateEnded { get; set; }
+        public int Difficulty { get; set; }
 
-        public override string ToString()
-        {
-            return $"{{{nameof(Id)}={Id.ToString()}, {nameof(Username)}={Username}, {nameof(Word)}={Word}, {nameof(GuessedChars)}={GuessedChars}, {nameof(WrongGuessCount)}={WrongGuessCount.ToString()}, {nameof(IsEnded)}={IsEnded.ToString()}, {nameof(IsGuessed)}={IsGuessed.ToString()}, {nameof(DateStarted)}={DateStarted.ToString()}, {nameof(DateEnded)}={DateEnded.ToString()}}}";
-        }
+        
     }   
 }

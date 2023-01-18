@@ -3,6 +3,7 @@
     public class GetSessionsResponseDto
     {
         public int GameId { get; set; }
+        public int Difficulty { get; set; }
         public string DashedWord { get; set; }
         public int WrongGuessCount { get; set; }
         public int RemainingGuessCount { get; set; }
