@@ -194,7 +194,10 @@ namespace Hangman.Controllers
         {
             var refreshToken = Request.Cookies["refreshToken"];
             var userName = _userServices.GetMyName();
-
+            if (userName.IsNullOrEmpty() || refreshToken.IsNullOrEmpty())
+            {
+                return BadRequest("Username or RefreshToken is Empty!");
+            }
             var user = _db.Users.FirstOrDefault(u => u.Username.ToLower() == userName.ToLower());
 
             if (user == null)
