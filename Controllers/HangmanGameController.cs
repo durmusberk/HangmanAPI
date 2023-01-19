@@ -64,13 +64,17 @@ namespace Hangman.Controllers
 
             var IsCorrect = IsGuessCorrect(request, session);
 
+            GuessResponseModel response;
+
             if (IsCorrect && request.IsWordGuess) 
             { 
                 session.IsEnded= true;
                 session.DateEnded = DateTime.UtcNow;
                 session.IsGuessed = true;
                 session.GuessedChars = session.GuessedChars.Replace('0', '1');
-                var CorrectWordGuessResponse = new GuessResponseModel()
+                
+
+                response = new GuessResponseModel()
                 {
                     DashedWord = request.Guess,
                     GameId = request.GameId,
@@ -80,14 +84,14 @@ namespace Hangman.Controllers
                     WrongGuessCount = session.WrongGuessCount
                 };
 
-                _db.SaveChanges();
-                return Ok(CorrectWordGuessResponse);
+                
+                
             }
 
             if (IsCorrect && !request.IsWordGuess)
             {
                 var DashedWord = CreateDashedWord(session.Word, CSVToIntArray(session.GuessedChars));
-                var CorrectLetterGuessResponse = new GuessResponseModel()
+                response = new GuessResponseModel()
                 {
                     DashedWord = DashedWord,
                     GameId = request.GameId,
@@ -97,22 +101,22 @@ namespace Hangman.Controllers
                     RemainingGuessCount = session.Word.Length - session.WrongGuessCount - session.Word.Count(Char.IsWhiteSpace)
 
                 };
-                if (CorrectLetterGuessResponse.IsFinished) 
+                if (response.IsFinished) 
                 {
                     session.IsEnded = true;
                     session.DateEnded = DateTime.UtcNow;
                     session.IsGuessed = true;
                     session.GuessedChars = session.GuessedChars.Replace('0', '1');
                 }
-                _db.SaveChanges();
-                return Ok(CorrectLetterGuessResponse);
+                
+                
             }
 
             //not correct
             session.WrongGuessCount++;
             if (IsGameOver(session))
             {
-                var GameOverResponse = new GuessResponseModel()
+                response = new GuessResponseModel()
                 {
                     DashedWord = session.Word,
                     GameId = session.GameId,
@@ -121,11 +125,10 @@ namespace Hangman.Controllers
                     RemainingGuessCount = 0,
                     WrongGuessCount = session.WrongGuessCount                    
                 };
-                _db.SaveChanges();
-                return Ok(GameOverResponse);
+                
             }
 
-            var WrongGuessGameContinueResponse = new GuessResponseModel()
+            response = new GuessResponseModel()
             {
                 GameId= session.GameId,
                 DashedWord = CreateDashedWord(session.Word, CSVToIntArray(session.GuessedChars)),
@@ -134,10 +137,9 @@ namespace Hangman.Controllers
                 WrongGuessCount= session.WrongGuessCount,
                 RemainingGuessCount = session.Word.Length - session.WrongGuessCount - session.Word.Count(Char.IsWhiteSpace)
             };
-            _db.SaveChanges();
-            return Ok(WrongGuessGameContinueResponse);
-
             
+            _db.SaveChanges();
+            return response;
         }
 
         
@@ -159,24 +161,18 @@ namespace Hangman.Controllers
 
             var username = _userServices.GetMyName();
 
-            var session_list = _db.Sessions.Where(u => u.Username == username && !u.IsEnded).ToList();
-
-            var response_list = new List<GetSessionsResponseDto>();
-
-            foreach (var item in session_list)
+            var session_list = _db.Sessions.Where(u => u.Username == username && !u.IsEnded).Select(x => new GetSessionsResponseDto
             {
-                var response = new GetSessionsResponseDto()
-                {
-                    GameId = item.GameId,
-                    DashedWord = CreateDashedWord(item.Word,CSVToIntArray(item.GuessedChars)),
-                    WrongGuessCount = item.WrongGuessCount,
-                    RemainingGuessCount = item.Word.Length - item.WrongGuessCount - item.Word.Count(Char.IsWhiteSpace),
-                    Difficulty = item.Difficulty
-                };
-                response_list.Add(response);
-            }
+                GameId = x.GameId,
+                DashedWord = CreateDashedWord(x.Word, CSVToIntArray(x.GuessedChars)),
+                WrongGuessCount = x.WrongGuessCount,
+                RemainingGuessCount = x.Word.Length - x.WrongGuessCount - x.Word.Count(Char.IsWhiteSpace),
+                Difficulty = x.Difficulty
+            }).ToList(); //hata verirse selectten once tolist yap veya createdashed wordu kendin yaz
 
-            return session_list.Any() ? Ok(response_list) : BadRequest("You do not have any session!");
+            
+
+            return session_list.Any() ? Ok(session_list) : NoContent();
 
         }
 
@@ -192,7 +188,7 @@ namespace Hangman.Controllers
             {
                 return valid;
             }
-
+            //_wordService.GetRandomWord();
             var Random_Word = _db.Words.OrderBy(r => Guid.NewGuid()).Take(1).FirstOrDefault();
             var word = Random_Word.Name.ToLower();
             var difficulty = Random_Word.Difficulty;
@@ -200,8 +196,10 @@ namespace Hangman.Controllers
             var GuessedChars = new int[word.Length];
             var GuessedCharsToCSV = IntArrayToCSV(GuessedChars);
             var DashedWord = CreateDashedWord(word, GuessedChars);
-
+            //_wordService.GetRandomWord() return word;
             int LastGameId;
+
+            //_sessionService.NewSession(word);
             try
             {
                 LastGameId = _db.Sessions.Where(s => s.Username == _userServices.GetMyName()).Max(u => u.GameId);
@@ -228,9 +226,10 @@ namespace Hangman.Controllers
 
             int rowsAffected;
 
+            rowsAffected = _db.SaveChanges();
+            //_sessionService.NewSession(word) return true or return Session.Id or NewGameResponseDto;
             try
             {
-                rowsAffected = _db.SaveChanges();
             }
             catch (Exception e)
             {
@@ -278,19 +277,10 @@ namespace Hangman.Controllers
 
             }
 
-            int rowsAffected;
-
-            try
-            {
-                rowsAffected = _db.SaveChanges();
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            _db.SaveChanges();
 
 
-            return rowsAffected > 0 ? Ok(true) : BadRequest(false);
+            return Ok(true);
 
 
         }
@@ -379,9 +369,9 @@ namespace Hangman.Controllers
         {
             var refreshToken = Request.Cookies["refreshToken"];
             var userName = _userServices.GetMyName();
-            if (userName.IsNullOrEmpty() || refreshToken.IsNullOrEmpty())
+            if (userName.IsNullOrEmpty())
             {
-                return BadRequest("Username or RefreshToken is Empty!");
+                return Unauthorized("Invalid Token or Token Expired!");
             }
             var user = _db.Users.FirstOrDefault(u => u.Username.ToLower() == userName.ToLower());
 
