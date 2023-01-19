@@ -8,5 +8,6 @@
         public string DashedWord { get; set; }
         public int WrongGuessCount { get; set; }
         public int RemainingGuessCount { get; set; }
+        public string Message { get; set; }
     }
 }

@@ -1,7 +1,10 @@
 global using Hangman.Services.UserService;
 using System.Text;
+using Hangman.BusinessLogics;
 using Hangman.Data;
 using Hangman.Profiles;
+using Hangman.Services.SessionService;
+using Hangman.Services.WordService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -20,6 +23,9 @@ builder.Services.AddDbContext<ApplicationDbContext>(option =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ISessionService, SessionService>();
+builder.Services.AddScoped<IWordService, WordService>();
+builder.Services.AddScoped<IGuessBusinessLogic,GuessBusinessLogic>();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAutoMapper(typeof(MapperProfile));
 

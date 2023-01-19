@@ -91,7 +91,7 @@ namespace Hangman.Controllers
             CreatePasswordHash(request.Password, out byte[] passwordHash, out byte[] passwordSalt);
 
             var new_user = new User {
-                Username= request.Username,
+                Username= request.Username.ToLower(),
                 PasswordHash=passwordHash,
                 PasswordSalt=passwordSalt,
                 Role = request.Role,
