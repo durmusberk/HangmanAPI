@@ -6,6 +6,6 @@ namespace Hangman.BusinessLogics
 {
     public interface IGuessBusinessLogic
     {
-        public GuessResponseModel GuessBL(GuessRequestModel request, Session session);
+        public GuessResponseModel GuessBL(GuessRequestDto request, Session session);
     }
 }

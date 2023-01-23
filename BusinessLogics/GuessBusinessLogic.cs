@@ -17,8 +17,11 @@ namespace Hangman.BusinessLogics
             _sessionService = sessionService;
             _db = db;
         }
-        public GuessResponseModel GuessBL(GuessRequestModel request,Session session)
+        public GuessResponseModel GuessBL(GuessRequestDto request,Session session)
         {
+
+            request.Guess = request.Guess.ToLower();
+
             var IsCorrect = IsGuessCorrect(request, session);
 
             GuessResponseModel response;
@@ -103,7 +106,7 @@ namespace Hangman.BusinessLogics
         {
             return session.WrongGuessCount >= session.Word.Length - session.Word.Count(Char.IsWhiteSpace);
         }
-        private bool IsGuessCorrect(GuessRequestModel request, Session session)
+        private bool IsGuessCorrect(GuessRequestDto request, Session session)
         {
             if (request.IsWordGuess)
             {
