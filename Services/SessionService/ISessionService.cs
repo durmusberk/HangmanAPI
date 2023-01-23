@@ -10,8 +10,6 @@ namespace Hangman.Services.SessionService
         List<GetSessionsResponseDto> GetAllActiveSessions(string username);
         Session? GetSession(string username,int GameId);
         void EndSession(Session session, bool IsGuessed);
-        void SetGuessedChars(Session session, string v);
-        void IncrementWrongGuessCount(Session session);
         void DeleteSessionsOfUser(string username);
     }
 }

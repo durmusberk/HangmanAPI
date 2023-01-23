@@ -32,7 +32,7 @@ namespace Hangman.Data
 
         public void SaveAsync()
         {
-            _db.SaveChangesAsync();
+            _db.SaveChanges();
         }
 
         private bool disposed = false;

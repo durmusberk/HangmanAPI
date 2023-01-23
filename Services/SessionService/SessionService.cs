@@ -90,10 +90,7 @@ namespace Hangman.Services.SessionService
            return _unitOfWork.SessionRepository.Get(u => u.Username == username && GameId == u.GameId).FirstOrDefault();
         }
 
-        public void IncrementWrongGuessCount(Session session)
-        {
-            session.WrongGuessCount++;
-        }
+        
 
         public NewGameResponseDto NewGame(Word word,string username)
         {
@@ -131,12 +128,6 @@ namespace Hangman.Services.SessionService
             return response;
         }
 
-        public void SetGuessedChars(Session session, string v)
-        {
-            session.GuessedChars= v;
-            _unitOfWork.SessionRepository.Update(session);
-            _unitOfWork.SaveAsync();
-            
-        }
+        
     }
 }

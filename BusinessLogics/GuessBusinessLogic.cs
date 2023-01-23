@@ -67,7 +67,7 @@ namespace Hangman.BusinessLogics
             //not correct
             else
             {
-                _sessionService.IncrementWrongGuessCount(session);
+                session.WrongGuessCount++;
                 if (IsGameOver(session))
                 {
                     _sessionService.EndSession(session, IsGuessed: false);
