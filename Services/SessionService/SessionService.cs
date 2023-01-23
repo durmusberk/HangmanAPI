@@ -1,9 +1,7 @@
-﻿using Azure.Core;
-using Hangman.Data;
+﻿using Hangman.Data;
 using Hangman.Extensions;
 using Hangman.Models;
 using Hangman.Models.ResponseModels;
-using Microsoft.EntityFrameworkCore;
 
 namespace Hangman.Services.SessionService
 {
@@ -76,15 +74,12 @@ namespace Hangman.Services.SessionService
 
         public int GetLastGameId(string username)
         {
-            int LastGameId;
-
-            try
+            
+            var LastSession = _unitOfWork.SessionRepository.Get(s => s.Username == username).OrderByDescending(u => u.GameId).FirstOrDefault();
+            int LastGameId = 0;
+            if (LastSession != null)
             {
-                LastGameId = _db.Sessions.Where(s => s.Username == username).Max(u => u.GameId);
-            }
-            catch (InvalidOperationException)
-            {
-                LastGameId = 0;
+                LastGameId = LastSession.GameId;
             }
 
             return LastGameId;
@@ -92,7 +87,7 @@ namespace Hangman.Services.SessionService
 
         public Session? GetSession(string username, int GameId)
         {
-           return _db.Sessions.FirstOrDefault(u => u.Username == username && GameId == u.GameId);
+           return _unitOfWork.SessionRepository.Get(u => u.Username == username && GameId == u.GameId).FirstOrDefault();
         }
 
         public void IncrementWrongGuessCount(Session session)
@@ -102,7 +97,6 @@ namespace Hangman.Services.SessionService
 
         public NewGameResponseDto NewGame(Word word,string username)
         {
-            word ??= new Word { Name = "Dummy Word", Difficulty = 2};
             var WordLowerCase = word.Name.ToLower();
             int WordCount = WordLowerCase.Split(" ").Length;
             var GuessedCharsCSV = HelperExtension.IntArrayToCSV(WordLowerCase.Length);
@@ -121,10 +115,8 @@ namespace Hangman.Services.SessionService
                 Difficulty = word.Difficulty
             };
 
-            _db.Sessions.Add(new_session);
-            _db.SaveChanges();
-
-
+            _unitOfWork.SessionRepository.InsertAsync(new_session);
+            _unitOfWork.SaveAsync();
             
             var response = new NewGameResponseDto()
             {
@@ -142,6 +134,9 @@ namespace Hangman.Services.SessionService
         public void SetGuessedChars(Session session, string v)
         {
             session.GuessedChars= v;
+            _unitOfWork.SessionRepository.Update(session);
+            _unitOfWork.SaveAsync();
+            
         }
     }
 }
