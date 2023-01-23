@@ -10,12 +10,11 @@ namespace Hangman.BusinessLogics
     public class GuessBusinessLogic : IGuessBusinessLogic
     {
         private readonly ISessionService _sessionService;
-        private readonly ApplicationDbContext _db;
+        private readonly UnitOfWork _unitOfWork = new UnitOfWork();
 
-        public GuessBusinessLogic(ISessionService sessionService,ApplicationDbContext db)
+        public GuessBusinessLogic(ISessionService sessionService)
         {
             _sessionService = sessionService;
-            _db = db;
         }
         public GuessResponseModel GuessBL(GuessRequestDto request,Session session)
         {
@@ -51,6 +50,8 @@ namespace Hangman.BusinessLogics
                     _sessionService.EndSession(session, IsGuessed: true);
                 }
 
+                var messageEnd = session.IsEnded ? "Congratulations! You Found The Word! " : "Continue to Guess!";
+
                 response = new GuessResponseModel()
                 {
                     GameId = request.GameId,
@@ -59,7 +60,7 @@ namespace Hangman.BusinessLogics
                     IsFinished = session.IsEnded,
                     WrongGuessCount = session.WrongGuessCount,
                     RemainingGuessCount = session.Word.Length - session.WrongGuessCount - session.Word.Count(Char.IsWhiteSpace),
-                    Message = "Your Letter Guess is Correct. Continue to Guess!"
+                    Message = "Your Letter Guess is Correct. " + messageEnd
 
                 };
             }
@@ -95,11 +96,12 @@ namespace Hangman.BusinessLogics
                         Message = "Oh! Your Guess is Incorrect. Try Again!"
                     };
                 }
+                _unitOfWork.SessionRepository.Update(session);
 
 
             }
 
-            _db.SaveChanges();
+            _unitOfWork.SaveAsync();
             return response;
         }
         private bool IsGameOver(Session session)
@@ -127,7 +129,10 @@ namespace Hangman.BusinessLogics
                 }
             }
 
-            _sessionService.SetGuessedChars(session,HelperExtension.IntArrayToCSV(GuessedChars));
+            session.GuessedChars = HelperExtension.IntArrayToCSV(GuessedChars);
+            _unitOfWork.SessionRepository.Update(session);
+            _unitOfWork.SaveAsync();
+
 
             return GuessCount > 0;
 
