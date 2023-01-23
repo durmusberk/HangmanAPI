@@ -3,16 +3,29 @@ using Hangman.Data;
 using Hangman.Extensions;
 using Hangman.Models;
 using Hangman.Models.ResponseModels;
+using Microsoft.EntityFrameworkCore;
 
 namespace Hangman.Services.SessionService
 {
     public class SessionService : ISessionService
     {
         private readonly ApplicationDbContext _db;
+        private readonly UnitOfWork _unitOfWork = new();
 
         public SessionService(ApplicationDbContext db)
         {
             _db = db;
+        }
+
+        public void DeleteSessionsOfUser(string username)
+        {
+            var all_sessions = _unitOfWork.SessionRepository.Get(x => x.Username == username).ToList();
+            if (all_sessions.Any())
+            {
+                _unitOfWork.SessionRepository.Delete(all_sessions);
+                _unitOfWork.SaveAsync();
+            }
+
         }
 
         public void EndSession(Session session, bool IsGuessed)
@@ -24,11 +37,29 @@ namespace Hangman.Services.SessionService
             {
                 session.GuessedChars = session.GuessedChars.Replace('0', '1');
             }
+
+            _unitOfWork.SessionRepository.Update(session);
+            _unitOfWork.SaveAsync();
         }
 
         public List<GetSessionsResponseDto> GetAllActiveSessions(string username)
         {
-            var session_list = _db.Sessions.Where(u => u.Username == username && !u.IsEnded).ToList().Select(x => new GetSessionsResponseDto
+            var active_session_list =  _unitOfWork.SessionRepository.Get(x => x.Username == username && !x.IsEnded).ToList().Select(x => new GetSessionsResponseDto
+            {
+                GameId = x.GameId,
+                DashedWord = HelperExtension.CreateDashedWord(x.Word, HelperExtension.CSVToIntArray(x.GuessedChars)),
+                WrongGuessCount = x.WrongGuessCount,
+                RemainingGuessCount = x.Word.Length - x.WrongGuessCount - x.Word.Count(Char.IsWhiteSpace),
+                Difficulty = x.Difficulty
+            }
+            ).ToList(); ; //hata verirse selectten once tolist yap veya createdashed wordu kendin yaz
+
+            return active_session_list;
+        }
+
+        public List<GetSessionsResponseDto> GetAllSessions(string username)
+        {
+            var session_list = _unitOfWork.SessionRepository.Get(x => x.Username == username).ToList().Select(x => new GetSessionsResponseDto
             {
                 GameId = x.GameId,
                 DashedWord = HelperExtension.CreateDashedWord(x.Word, HelperExtension.CSVToIntArray(x.GuessedChars)),
@@ -40,6 +71,8 @@ namespace Hangman.Services.SessionService
 
             return session_list;
         }
+
+
 
         public int GetLastGameId(string username)
         {

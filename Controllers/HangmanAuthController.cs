@@ -1,11 +1,14 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using AutoMapper;
+using FluentValidation;
+using FluentValidation.AspNetCore;
+using FluentValidation.Results;
 using Hangman.Data;
 using Hangman.Models;
 using Hangman.Models.RequestModels;
 using Hangman.Models.ResponseModels;
+using Hangman.Services.SessionService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -17,36 +20,42 @@ namespace Hangman.Controllers
     [ApiController]
     public class HangmanAuthController : Controller
     {
-        private readonly ApplicationDbContext _db;
-        private readonly IMapper _mapper;
+
+        #region Constructor
+
         private readonly IConfiguration _configuration;
-        private readonly IUserService _userServices;
+        private readonly IUserService _userService;
+        private readonly ISessionService _sessionService;
+        private readonly IValidator<UserLoginRequestDto> _userLoginValidator;
+        private readonly IValidator<UserRegisterRequestDto> _userRegisterValidator;
         private readonly int JWTExpirationTimeInMinutes = 30;
         private readonly int RefreshTokenExpirationTimeInMinutes = 30;
 
 
-        public HangmanAuthController(ApplicationDbContext db, IMapper mapper,IConfiguration configuration, IUserService userServices)
+        public HangmanAuthController(IConfiguration configuration, IUserService userService,ISessionService sessionService,IValidator<UserLoginRequestDto> userLoginValidator, IValidator<UserRegisterRequestDto> userRegisterValidator)
         {
-            _db= db;
-            _mapper= mapper;
             _configuration = configuration;
-            _userServices = userServices;
+            _userService = userService;
+            _sessionService = sessionService;
+            _userLoginValidator = userLoginValidator;
+            _userRegisterValidator = userRegisterValidator;
         }
+        #endregion
 
         #region GetAllUsers
 
         [HttpGet("Users"),Authorize(Roles ="Admin")]
 
-        public  ActionResult<List<User>> GetUsers()
+        public async  Task<ActionResult<List<User>>> GetUsers()
         {
-            var valid = CheckTokenValidation();
+            var valid = await CheckTokenValidation();
             if (valid != null)
             {
                 return valid;
             }
             
-
-            var list =  _db.Users.ToList();
+            var list = _userService.GetUsers();
+            
 
             return Ok(list);
         }
@@ -54,17 +63,37 @@ namespace Hangman.Controllers
 
         #endregion
 
+        #region DeleteUser
+
+        [HttpDelete("DeleteUser", Name = "DeleteUserByUsername"),Authorize(Roles ="Admin")]
+        public async Task<ActionResult<bool>> DeleteUserByUsername(string username)
+        {
+            var user = await _userService.GetUserAsync(username);
+            if (user != null)
+            {
+             _userService.DeleteUser(username);
+            _sessionService.DeleteSessionsOfUser(username);
+                
+            return Ok("User Deleted!");
+
+            }
+            return BadRequest("No Such A User!");
+
+        }
+
+        #endregion
+
         #region GetMe
 
         [HttpGet("GetMe"), Authorize]
-        public ActionResult<string> GetMe()
+        public async Task<ActionResult<string>> GetMe()
         {
-            var valid = CheckTokenValidation();
+            var valid = await CheckTokenValidation();
             if (valid != null)
             {
                 return valid;
             }
-            var userName = _userServices.GetMyName();
+            var userName = _userService.GetMyName();
             return Ok(userName);
         }
 
@@ -76,33 +105,23 @@ namespace Hangman.Controllers
         public async Task<ActionResult<UserRegisterResponseDto>> Register(UserRegisterRequestDto request)
         {
 
-            if (request == null || request.Username.IsNullOrEmpty() || request.Password.IsNullOrEmpty())
+            ValidationResult result = await _userRegisterValidator.ValidateAsync(request);
+            if (!result.IsValid)
             {
-                ModelState.AddModelError("Custom Error", "Inputs Shouldn't Be Empty!");
+                result.AddToModelState(ModelState);
                 return BadRequest(ModelState);
             }
 
-            if (_db.Users.FirstOrDefault(u => u.Username.ToLower() == request.Username.ToLower()) != null)
+            var user = await _userService.GetUserAsync(request.Username);
+
+            if (user != null)
             {
                 ModelState.AddModelError("Custom Error", "User Already Exists!");
                 return BadRequest(ModelState);
             }
 
-            CreatePasswordHash(request.Password, out byte[] passwordHash, out byte[] passwordSalt);
-
-            var new_user = new User {
-                Username= request.Username.ToLower(),
-                PasswordHash=passwordHash,
-                PasswordSalt=passwordSalt,
-                Role = request.Role,
-                CreatedDate = DateTime.Now
-            };
-
-            _db.Users.Add(new_user);
-
-            _db.SaveChanges();
-
-            var response = _mapper.Map<UserRegisterResponseDto>(new_user);
+            
+            var response = _userService.RegisterUser(request);
 
             return Ok(response);
         }
@@ -115,21 +134,21 @@ namespace Hangman.Controllers
         public async Task<ActionResult<UserLoginResponseDto>> Login(UserLoginRequestDto request)
         {
 
-            if (request == null || request.Username.IsNullOrEmpty() || request.Password.IsNullOrEmpty())
+            ValidationResult result = await _userLoginValidator.ValidateAsync(request);
+            if (!result.IsValid)
             {
-                ModelState.AddModelError("Custom Error", "Inputs Shouldn't Be Empty!");
+                result.AddToModelState(ModelState);
                 return BadRequest(ModelState);
             }
 
-            var user = _db.Users.FirstOrDefault(u => u.Username.ToLower() == request.Username.ToLower());
+
+            var user = await _userService.GetUserAsync(request.Username);
 
             if (user == null)
             {
                 ModelState.AddModelError("Custom Error", "User Does not Exists!");
                 return BadRequest(ModelState);
             }
-
-            
 
             if (!VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
             {
@@ -142,46 +161,35 @@ namespace Hangman.Controllers
 
             SetRefreshToken(refreshToken);
 
-            user.RefreshToken = refreshToken.Token;
-            user.TokenCreated = refreshToken.Created;
-            user.TokenExpires = refreshToken.Expires;
+            await _userService.SetTokenToUserAsync(user.Username,refreshToken);
 
-            Console.WriteLine(user.RefreshToken + " " + user.TokenExpires + " "+user.TokenCreated);
-
-            _db.SaveChanges();
-
-
-            return  Ok(Token);
+            return Ok(Token);
         }
 
 
 
         #endregion
 
-        #region refresh-token
+        #region RefreshToken
 
         [HttpPost("refresh-token"),Authorize]
         public async Task<ActionResult<string>> RefreshToken()
         {
-            var valid = CheckTokenValidation();
+            var valid = await CheckTokenValidation();
             if (valid != null)
             {
                 return valid;
             }
 
-            var userName = _userServices.GetMyName();
+            var userName = _userService.GetMyName();
 
-            var user = _db.Users.FirstOrDefault(u => u.Username.ToLower() == userName.ToLower());
+            var user = await _userService.GetUserAsync(userName);
 
             string token = CreateToken(user);
             var newRefreshToken = GenerateRefreshToken();
             SetRefreshToken(newRefreshToken);
 
-            user.RefreshToken = newRefreshToken.Token;
-            user.TokenCreated = newRefreshToken.Created;
-            user.TokenExpires = newRefreshToken.Expires;
-
-            _db.SaveChanges();
+            _userService.SetTokenToUserAsync(userName,newRefreshToken);
 
             return Ok(token);
         }
@@ -190,15 +198,15 @@ namespace Hangman.Controllers
 
         #region Methods
 
-        private ActionResult? CheckTokenValidation()
+        private async Task<ActionResult?> CheckTokenValidation()
         {
             var refreshToken = Request.Cookies["refreshToken"];
-            var userName = _userServices.GetMyName();
+            var userName = _userService.GetMyName();
             if (userName.IsNullOrEmpty() || refreshToken.IsNullOrEmpty())
             {
                 return BadRequest("Username or RefreshToken is Empty!");
             }
-            var user = _db.Users.FirstOrDefault(u => u.Username.ToLower() == userName.ToLower());
+            var user = await _userService.GetUserAsync(userName);
 
             if (user == null)
             {
@@ -216,12 +224,7 @@ namespace Hangman.Controllers
 
             return null;
         }
-        private void CreatePasswordHash(string password, out byte[] passwordHash, out byte[] passwordSalt)
-        {
-            using var hmac = new HMACSHA512();
-            passwordSalt = hmac.Key;
-            passwordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
-        }
+        
 
         private RefreshToken GenerateRefreshToken()
         {
