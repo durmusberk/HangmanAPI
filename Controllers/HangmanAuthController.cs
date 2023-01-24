@@ -48,9 +48,15 @@ namespace Hangman.Controllers
             await _authManager.CheckTokenValidation(Request);
 
             var list = _userService.GetUsers();
-            
+
+            if (!list.Any())
+            {
+                throw new UserNotFoundException();
+            }
 
             return Ok(list);
+
+            
         }
 
 
@@ -72,7 +78,7 @@ namespace Hangman.Controllers
             _userService.DeleteUser(username);
             _sessionService.DeleteSessionsOfUser(username);
 
-            return Ok("User Deleted!");
+            return Ok($"User {username} Deleted! And All Sessions of the {username} Deleted!");
 
         }
 

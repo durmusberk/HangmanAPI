@@ -8,5 +8,9 @@ namespace Hangman.Models.Exceptions
             : base($"User with <{username}> username does not exists.")
         {
         }
+        public UserNotFoundException()
+            : base("No User Found!")
+        {
+        }
     }
 }

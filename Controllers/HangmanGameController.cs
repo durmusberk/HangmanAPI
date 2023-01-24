@@ -10,7 +10,6 @@ using Hangman.Services.AuthManager;
 using Hangman.Services.SessionService;
 using Hangman.Services.WordService;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
 
 namespace Hangman.Controllers
 {
@@ -47,8 +46,12 @@ namespace Hangman.Controllers
         [HttpPost("Guess")]
         public async Task<ActionResult<GuessResponseModel>> Guess(GuessRequestDto request)
         {
-
             await _authManager.CheckTokenValidation(Request);
+
+            var username = _userService.GetMyName();
+
+            var GameSession = _sessionService.GetSessionForGuess(username,request.GameId);
+
 
             ValidationResult result = await _guessRequestValidator.ValidateAsync(request);
             if (!result.IsValid)
@@ -56,20 +59,8 @@ namespace Hangman.Controllers
                 throw new InvalidRequestException(result);
             }
 
-            var username = _userService.GetMyName();
 
-            var session = _sessionService.GetSession(username,request.GameId);
-
-            if (session == null)
-            {
-                throw new SessionNotFoundException(request.GameId);
-            }
-            if (session.IsEnded)
-            {
-                throw new SessionAlreadyEndedException(request.GameId);
-            }
-
-            var response = _guessBusinessLogic.GuessBL(request,session);
+            var response = _guessBusinessLogic.GuessBL(request,GameSession);
 
             return Ok(response);
             

@@ -1,6 +1,8 @@
-﻿using Hangman.Data;
+﻿using Azure.Core;
+using Hangman.Data;
 using Hangman.Extensions;
 using Hangman.Models;
+using Hangman.Models.Exceptions;
 using Hangman.Models.ResponseModels;
 
 namespace Hangman.Services.SessionService
@@ -90,7 +92,20 @@ namespace Hangman.Services.SessionService
            return _unitOfWork.SessionRepository.Get(u => u.Username == username && GameId == u.GameId).FirstOrDefault();
         }
 
-        
+        public Session GetSessionForGuess(string username, int GameId)
+        {
+            var session = GetSession(username, GameId);
+
+            if (session == null)
+            {
+                throw new SessionNotFoundException(GameId);
+            }
+            if (session.IsEnded)
+            {
+                throw new SessionAlreadyEndedException(GameId);
+            }
+            return session;
+        }
 
         public NewGameResponseDto NewGame(Word word,string username)
         {

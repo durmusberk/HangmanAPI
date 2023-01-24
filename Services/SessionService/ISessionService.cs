@@ -11,5 +11,7 @@ namespace Hangman.Services.SessionService
         Session? GetSession(string username,int GameId);
         void EndSession(Session session, bool IsGuessed);
         void DeleteSessionsOfUser(string username);
+
+        Session GetSessionForGuess(string username,int gameId);
     }
 }
