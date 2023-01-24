@@ -3,12 +3,11 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Hangman.Models;
+using Hangman.Models.Exceptions;
 using Hangman.Models.RequestModels;
-using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
-namespace Hangman.Extensions
+namespace Hangman.Services.AuthManager
 {
     public class AuthManager : IAuthManager
     {
@@ -16,37 +15,37 @@ namespace Hangman.Extensions
         private readonly IUserService _userService;
         private readonly int JWTExpirationTimeInMinutes = 30;
         private readonly int RefreshTokenExpirationTimeInMinutes = 30;
-        public AuthManager(IConfiguration configuration,IUserService userService)
+        public AuthManager(IConfiguration configuration, IUserService userService)
         {
-                _configuration= configuration;
-                _userService = userService;
+            _configuration = configuration;
+            _userService = userService;
         }
 
-        public async Task<string> SetToken(User user,HttpResponse Response)
+        public async Task<string> SetToken(User user, HttpResponse Response)
         {
             var Token = CreateToken(user);
 
             var refreshToken = GenerateRefreshToken();
 
-            SetRefreshToken(refreshToken,Response);
+            SetRefreshToken(refreshToken, Response);
 
             await _userService.SetTokenToUserAsync(user.Username, refreshToken);
 
             return Token;
         }
 
-        public async Task<object> VerifyUser(UserLoginRequestDto request)
+        public async Task<User> VerifyUser(UserLoginRequestDto request)
         {
             var user = await _userService.GetUserAsync(request.Username);
 
             if (user == null)
             {
-                return "1";
+                throw new UserNotFoundException(request.Username);
             }
 
             if (!VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
             {
-                return "2";
+                throw new WrongPasswordException();
             }
             return user;
         }
@@ -93,7 +92,7 @@ namespace Hangman.Extensions
 
             return refreshToken;
         }
-        private void SetRefreshToken(RefreshToken newRefreshToken,HttpResponse Response)
+        private void SetRefreshToken(RefreshToken newRefreshToken, HttpResponse Response)
         {
             var cookieOptions = new CookieOptions
             {
@@ -106,38 +105,27 @@ namespace Hangman.Extensions
         }
 
 
-        public async Task<int>? CheckTokenValidation(HttpRequest Request)
+        public async Task<bool?> CheckTokenValidation(HttpRequest Request)
         {
             var refreshToken = Request.Cookies["refreshToken"];
             var userName = _userService.GetMyName();
 
             if (userName.IsNullOrEmpty() || refreshToken.IsNullOrEmpty())
-            {
-                //return BadRequest("Username or RefreshToken is Empty!");
-                return 400;
-            }
+                throw new InvalidRefreshTokenException();
+
             var user = await _userService.GetUserAsync(userName);
 
             if (user == null)
-            {
-                //return BadRequest("No Such A User!");
-                return 404;
-            }
+                throw new UserNotFoundException(userName);
 
             if (!user.RefreshToken.Equals(refreshToken))
-            {
-                //return Unauthorized("Invalid Refresh Token.");
-                return 401;
-            }
+                throw new InvalidRefreshTokenException();
+            
             else if (user.TokenExpires < DateTime.Now)
-            {
-                //return Unauthorized("Token expired.");
-                return 401;
-            }
-
-            return 200;
+                throw new ExpiredRefreshTokenException();
+            return null;
         }
 
-       
+
     }
 }

@@ -1,18 +1,14 @@
-﻿using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using FluentValidation;
+﻿using FluentValidation;
 using FluentValidation.AspNetCore;
 using FluentValidation.Results;
-using Hangman.Data;
-using Hangman.Extensions;
 using Hangman.Models;
+using Hangman.Models.Exceptions;
 using Hangman.Models.RequestModels;
 using Hangman.Models.ResponseModels;
+using Hangman.Services.AuthManager;
 using Hangman.Services.SessionService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
 
 namespace Hangman.Controllers
 {
@@ -49,17 +45,7 @@ namespace Hangman.Controllers
 
         public async  Task<ActionResult<List<User>>> GetUsers()
         {
-            switch (await _authManager.CheckTokenValidation(Request))
-            {
-                case 401:
-                    return Unauthorized();
-                case 404:
-                    return NotFound();
-                case 400:
-                    return BadRequest();
-                default:
-                    break;
-            }
+            await _authManager.CheckTokenValidation(Request);
 
             var list = _userService.GetUsers();
             
@@ -75,28 +61,18 @@ namespace Hangman.Controllers
         [HttpDelete("DeleteUser", Name = "DeleteUserByUsername"),Authorize(Roles ="Admin")]
         public async Task<ActionResult<bool>> DeleteUserByUsername(string username)
         {
-            switch (await _authManager.CheckTokenValidation(Request))
-            {
-                case 401:
-                    return Unauthorized();
-                case 404:
-                    return NotFound();
-                case 400:
-                    return BadRequest();
-                default:
-                    break;
-            }
+            await _authManager.CheckTokenValidation(Request);
 
-           
-            if (await _userService.UserExists(username))
+
+            if (!await _userService.UserExists(username))
             {
-             _userService.DeleteUser(username);
+                throw new UserNotFoundException(username);
+
+            }
+            _userService.DeleteUser(username);
             _sessionService.DeleteSessionsOfUser(username);
-                
-            return Ok("User Deleted!");
 
-            }
-            return BadRequest("No Such A User!");
+            return Ok("User Deleted!");
 
         }
 
@@ -107,19 +83,8 @@ namespace Hangman.Controllers
         [HttpGet("GetMe"), Authorize]
         public async Task<ActionResult<string>> GetMe()
         {
-            switch (await _authManager.CheckTokenValidation(Request))
-            {
-                case 401:
-                    return Unauthorized();
-                case 404:
-                    return NotFound();
-                case 400:
-                    return BadRequest();
-                default:
-                    break;
-            }
+            await _authManager.CheckTokenValidation(Request);
 
-            
             return Ok(_userService.GetMyName());
         }
 
@@ -134,14 +99,12 @@ namespace Hangman.Controllers
             ValidationResult result = await _userRegisterValidator.ValidateAsync(request);
             if (!result.IsValid)
             {
-                result.AddToModelState(ModelState);
-                return BadRequest(ModelState);
+                throw new InvalidRequestException(result);
             }
 
             if (await _userService.UserExists(request.Username))
             {
-                ModelState.AddModelError("UserAlreadyExistError", "This username already in use. Try Another!");
-                return BadRequest(ModelState);
+                throw new UserAlreadyExistsException(request.Username);
             }
 
             
@@ -159,21 +122,14 @@ namespace Hangman.Controllers
         {
 
             ValidationResult result = await _userLoginValidator.ValidateAsync(request);
-            if (!result.IsValid){ result.AddToModelState(ModelState); return BadRequest(ModelState);}
-            
-            var VerifiedUser = await _authManager.VerifyUser(request);
-
-            switch (VerifiedUser)
+            if (!result.IsValid)
             {
-                case "1":
-                    return BadRequest("No Such A User!");
-                case "2":
-                    return BadRequest("Wrong Password!");
-                default:
-                    break;
+                throw new InvalidRequestException(result);
             }
-           
-            var Token = await _authManager.SetToken((User)VerifiedUser,Response);
+
+            User VerifiedUser = await _authManager.VerifyUser(request);
+
+            var Token = await _authManager.SetToken(VerifiedUser,Response);
 
             return Ok(Token);
         }
@@ -187,18 +143,8 @@ namespace Hangman.Controllers
         [HttpPost("RefreshToken"),Authorize]
         public async Task<ActionResult<string>> RefreshToken()
         {
-            
-            switch (await _authManager.CheckTokenValidation(Request))
-            {
-                case 401:
-                    return Unauthorized();
-                case 404:
-                    return NotFound();
-                case 400:
-                    return BadRequest();
-                default:
-                    break;
-            }
+
+            await _authManager.CheckTokenValidation(Request);
 
             var userName = _userService.GetMyName();
 

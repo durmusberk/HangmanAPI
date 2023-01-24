@@ -3,9 +3,10 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using FluentValidation.Results;
 using Hangman.BusinessLogics;
-using Hangman.Extensions;
+using Hangman.Models.Exceptions;
 using Hangman.Models.RequestModels;
 using Hangman.Models.ResponseModels;
+using Hangman.Services.AuthManager;
 using Hangman.Services.SessionService;
 using Hangman.Services.WordService;
 using Microsoft.AspNetCore.Mvc;
@@ -47,23 +48,12 @@ namespace Hangman.Controllers
         public async Task<ActionResult<GuessResponseModel>> Guess(GuessRequestDto request)
         {
 
-            switch (await _authManager.CheckTokenValidation(Request))
-            {
-                case 401:
-                    return Unauthorized();
-                case 404:
-                    return NotFound();
-                case 400:
-                    return BadRequest();
-                default:
-                    break;
-            }
+            await _authManager.CheckTokenValidation(Request);
 
             ValidationResult result = await _guessRequestValidator.ValidateAsync(request);
             if (!result.IsValid)
             {
-                result.AddToModelState(ModelState);
-                return BadRequest(ModelState);
+                throw new InvalidRequestException(result);
             }
 
             var username = _userService.GetMyName();
@@ -72,11 +62,11 @@ namespace Hangman.Controllers
 
             if (session == null)
             {
-                return NotFound("No Such A Session!");
+                throw new SessionNotFoundException(request.GameId);
             }
             if (session.IsEnded)
             {
-                return BadRequest("This Session is Already Ended!");
+                throw new SessionAlreadyEndedException(request.GameId);
             }
 
             var response = _guessBusinessLogic.GuessBL(request,session);
@@ -91,25 +81,18 @@ namespace Hangman.Controllers
         [HttpGet("Sessions")]
         public async Task<ActionResult<List<GetSessionsResponseDto>>> GetSessions()
         {
-            switch (await _authManager.CheckTokenValidation(Request))
-            {
-                case 401:
-                    return Unauthorized();
-                case 404:
-                    return NotFound();
-                case 400:
-                    return BadRequest();
-                default:
-                    break;
-            }
+            await _authManager.CheckTokenValidation(Request);
 
             var username = _userService.GetMyName();
 
             var SessionList = _sessionService.GetAllActiveSessions(username);
 
-            
+            if (SessionList.Any())
+            {
+                return Ok(SessionList);
+            }
 
-            return SessionList.Any() ? Ok(SessionList) : NoContent();
+            throw new SessionNotFoundException();
 
         }
 
@@ -120,25 +103,14 @@ namespace Hangman.Controllers
         [HttpPost("StartNewGame")]
         public async Task<ActionResult<NewGameResponseDto>> StartNewGame(NewGameRequestDto request)
         {
-            switch (await _authManager.CheckTokenValidation(Request))
-            {
-                case 401:
-                    return Unauthorized();
-                case 404:
-                    return NotFound();
-                case 400:
-                    return BadRequest();
-                default:
-                    break;
-            }
+            await _authManager.CheckTokenValidation(Request);
 
             ValidationResult result = await _newGameValidator.ValidateAsync(request);
             if (!result.IsValid)
             {
-                result.AddToModelState(ModelState);
-                return BadRequest(ModelState);
+                throw new InvalidRequestException(result);
             }
-            
+
 
             var RandomWord = _wordService.GetRandomWordWithGivenDifficulty(request.Difficulty);
             var UserName = _userService.GetMyName().ToLower();

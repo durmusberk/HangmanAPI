@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using AutoMapper;
 using Hangman.Data;
 using Hangman.Models;
+using Hangman.Models.Exceptions;
 using Hangman.Models.RequestModels;
 using Hangman.Models.ResponseModels;
 
@@ -41,15 +42,10 @@ namespace Hangman.Services.UserService
             return result;
         }
 
-        public async Task<User> GetUserAsync(string username)
+        public async Task<User>? GetUserAsync(string username)
         {
             var user = await _unitOfWork.UserRepository.GetByID(username);
 
-            if (user == null)
-            {
-                return null;//there should be exception throw
-            }
-            
             return user;
         }
 
@@ -89,6 +85,10 @@ namespace Hangman.Services.UserService
         public async Task<User> SetTokenToUserAsync(string username,RefreshToken newRefreshToken)
         {
             var user = await GetUserAsync(username);
+            if (user == null)
+            {
+                throw new UserNotFoundException(username);
+            }
             user.RefreshToken = newRefreshToken.Token;
             user.TokenCreated = newRefreshToken.Created;
             user.TokenExpires = newRefreshToken.Expires;
