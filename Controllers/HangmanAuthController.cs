@@ -5,6 +5,7 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using FluentValidation.Results;
 using Hangman.Data;
+using Hangman.Extensions;
 using Hangman.Models;
 using Hangman.Models.RequestModels;
 using Hangman.Models.ResponseModels;
@@ -23,22 +24,22 @@ namespace Hangman.Controllers
 
         #region Constructor
 
-        private readonly IConfiguration _configuration;
         private readonly IUserService _userService;
         private readonly ISessionService _sessionService;
         private readonly IValidator<UserLoginRequestDto> _userLoginValidator;
         private readonly IValidator<UserRegisterRequestDto> _userRegisterValidator;
-        private readonly int JWTExpirationTimeInMinutes = 30;
-        private readonly int RefreshTokenExpirationTimeInMinutes = 30;
+        private readonly IAuthManager _authManager;
 
 
-        public HangmanAuthController(IConfiguration configuration, IUserService userService,ISessionService sessionService,IValidator<UserLoginRequestDto> userLoginValidator, IValidator<UserRegisterRequestDto> userRegisterValidator)
+        public HangmanAuthController( IUserService userService,ISessionService sessionService,
+            IValidator<UserLoginRequestDto> userLoginValidator, IValidator<UserRegisterRequestDto> userRegisterValidator,
+            IAuthManager authManager)
         {
-            _configuration = configuration;
             _userService = userService;
             _sessionService = sessionService;
             _userLoginValidator = userLoginValidator;
             _userRegisterValidator = userRegisterValidator;
+            _authManager = authManager;
         }
         #endregion
 
@@ -48,12 +49,18 @@ namespace Hangman.Controllers
 
         public async  Task<ActionResult<List<User>>> GetUsers()
         {
-            var valid = await CheckTokenValidation();
-            if (valid != null)
+            switch (await _authManager.CheckTokenValidation(Request))
             {
-                return valid;
+                case 401:
+                    return Unauthorized();
+                case 404:
+                    return NotFound();
+                case 400:
+                    return BadRequest();
+                default:
+                    break;
             }
-            
+
             var list = _userService.GetUsers();
             
 
@@ -68,8 +75,20 @@ namespace Hangman.Controllers
         [HttpDelete("DeleteUser", Name = "DeleteUserByUsername"),Authorize(Roles ="Admin")]
         public async Task<ActionResult<bool>> DeleteUserByUsername(string username)
         {
-            var user = await _userService.GetUserAsync(username);
-            if (user != null)
+            switch (await _authManager.CheckTokenValidation(Request))
+            {
+                case 401:
+                    return Unauthorized();
+                case 404:
+                    return NotFound();
+                case 400:
+                    return BadRequest();
+                default:
+                    break;
+            }
+
+           
+            if (await _userService.UserExists(username))
             {
              _userService.DeleteUser(username);
             _sessionService.DeleteSessionsOfUser(username);
@@ -88,20 +107,27 @@ namespace Hangman.Controllers
         [HttpGet("GetMe"), Authorize]
         public async Task<ActionResult<string>> GetMe()
         {
-            var valid = await CheckTokenValidation();
-            if (valid != null)
+            switch (await _authManager.CheckTokenValidation(Request))
             {
-                return valid;
+                case 401:
+                    return Unauthorized();
+                case 404:
+                    return NotFound();
+                case 400:
+                    return BadRequest();
+                default:
+                    break;
             }
-            var userName = _userService.GetMyName();
-            return Ok(userName);
+
+            
+            return Ok(_userService.GetMyName());
         }
 
         #endregion
 
         #region UserRegister
 
-        [HttpPost("register")]
+        [HttpPost("Register")]
         public async Task<ActionResult<UserRegisterResponseDto>> Register(UserRegisterRequestDto request)
         {
 
@@ -112,11 +138,9 @@ namespace Hangman.Controllers
                 return BadRequest(ModelState);
             }
 
-            var user = await _userService.GetUserAsync(request.Username);
-
-            if (user != null)
+            if (await _userService.UserExists(request.Username))
             {
-                ModelState.AddModelError("Custom Error", "User Already Exists!");
+                ModelState.AddModelError("UserAlreadyExistError", "This username already in use. Try Another!");
                 return BadRequest(ModelState);
             }
 
@@ -130,38 +154,26 @@ namespace Hangman.Controllers
 
         #region UserLogin
 
-        [HttpPost("login")]
+        [HttpPost("Login")]
         public async Task<ActionResult<UserLoginResponseDto>> Login(UserLoginRequestDto request)
         {
 
             ValidationResult result = await _userLoginValidator.ValidateAsync(request);
-            if (!result.IsValid)
+            if (!result.IsValid){ result.AddToModelState(ModelState); return BadRequest(ModelState);}
+            
+            var VerifiedUser = await _authManager.VerifyUser(request);
+
+            switch (VerifiedUser)
             {
-                result.AddToModelState(ModelState);
-                return BadRequest(ModelState);
+                case "1":
+                    return BadRequest("No Such A User!");
+                case "2":
+                    return BadRequest("Wrong Password!");
+                default:
+                    break;
             }
-
-
-            var user = await _userService.GetUserAsync(request.Username);
-
-            if (user == null)
-            {
-                ModelState.AddModelError("Custom Error", "User Does not Exists!");
-                return BadRequest(ModelState);
-            }
-
-            if (!VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
-            {
-                return BadRequest("Password is wrong!");
-            }
-
-            var Token = CreateToken(user);
-
-            var refreshToken = GenerateRefreshToken();
-
-            SetRefreshToken(refreshToken);
-
-            await _userService.SetTokenToUserAsync(user.Username,refreshToken);
+           
+            var Token = await _authManager.SetToken((User)VerifiedUser,Response);
 
             return Ok(Token);
         }
@@ -172,115 +184,33 @@ namespace Hangman.Controllers
 
         #region RefreshToken
 
-        [HttpPost("refresh-token"),Authorize]
+        [HttpPost("RefreshToken"),Authorize]
         public async Task<ActionResult<string>> RefreshToken()
         {
-            var valid = await CheckTokenValidation();
-            if (valid != null)
+            
+            switch (await _authManager.CheckTokenValidation(Request))
             {
-                return valid;
+                case 401:
+                    return Unauthorized();
+                case 404:
+                    return NotFound();
+                case 400:
+                    return BadRequest();
+                default:
+                    break;
             }
 
             var userName = _userService.GetMyName();
 
             var user = await _userService.GetUserAsync(userName);
 
-            string token = CreateToken(user);
-            var newRefreshToken = GenerateRefreshToken();
-            SetRefreshToken(newRefreshToken);
-
-            _userService.SetTokenToUserAsync(userName,newRefreshToken);
+            var token = await _authManager.SetToken(user,Response);
 
             return Ok(token);
         }
 
         #endregion
 
-        #region Methods
 
-        private async Task<ActionResult?> CheckTokenValidation()
-        {
-            var refreshToken = Request.Cookies["refreshToken"];
-            var userName = _userService.GetMyName();
-            if (userName.IsNullOrEmpty() || refreshToken.IsNullOrEmpty())
-            {
-                return BadRequest("Username or RefreshToken is Empty!");
-            }
-            var user = await _userService.GetUserAsync(userName);
-
-            if (user == null)
-            {
-                return BadRequest("NoSuchAUser!");
-            }
-
-            if (!user.RefreshToken.Equals(refreshToken))
-            {
-                return Unauthorized("Invalid Refresh Token.");
-            }
-            else if (user.TokenExpires < DateTime.Now)
-            {
-                return Unauthorized("Token expired.");
-            }
-
-            return null;
-        }
-        
-
-        private RefreshToken GenerateRefreshToken()
-        {
-            var refreshToken = new RefreshToken
-            {
-                Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
-                Expires = DateTime.Now.AddMinutes(RefreshTokenExpirationTimeInMinutes),
-                Created = DateTime.Now
-            };
-
-            return refreshToken;
-        }
-
-        private void SetRefreshToken(RefreshToken newRefreshToken)
-        {
-            var cookieOptions = new CookieOptions
-            {
-                HttpOnly = true,
-                Expires = newRefreshToken.Expires
-            };
-            Response.Cookies.Append("refreshToken", newRefreshToken.Token, cookieOptions);
-
-
-        }
-        private string CreateToken(User user)
-        {
-
-            List<Claim> claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Role, user.Role == 0 ? "User" : "Admin") //have to get rid of this and user.Role should return string from enum
-            };
-
-            var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(
-                _configuration.GetSection("AppSettings:Token").Value
-                ));
-
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);
-
-            var token = new JwtSecurityToken(
-                claims: claims,
-                expires: DateTime.Now.AddMinutes(JWTExpirationTimeInMinutes),
-                signingCredentials: creds);
-
-            var jwt = new JwtSecurityTokenHandler().WriteToken(token);
-
-            return jwt;
-        }
-
-        private bool VerifyPassword(string password, byte[] passwordHash, byte[] passwordSalt)
-        {
-            using var hmac = new HMACSHA512(passwordSalt);
-            var computedHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
-            return computedHash.SequenceEqual(passwordHash);
-        }
-
-        #endregion
     }
 }

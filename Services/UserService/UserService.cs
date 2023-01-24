@@ -58,6 +58,11 @@ namespace Hangman.Services.UserService
             return _unitOfWork.UserRepository.Get();
         }
 
+        public async Task<bool> UserExists(string username)
+        {
+            return  await _unitOfWork.UserRepository.GetByID(username) != null;
+        }
+
         public  UserRegisterResponseDto RegisterUser(UserRegisterRequestDto request)
         {
             CreatePasswordHash(request.Password, out byte[] passwordHash, out byte[] passwordSalt);
