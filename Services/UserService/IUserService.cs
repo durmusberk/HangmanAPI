@@ -8,9 +8,10 @@ namespace Hangman.Services.UserService
     {
         void DeleteUser(string username);
         string GetMyName();
-        Task<User> GetUserAsync(string username);
+        Task<User>? GetUserAsync(string username);
         IEnumerable<User> GetUsers();
         UserRegisterResponseDto RegisterUser(UserRegisterRequestDto request);
         Task<User> SetTokenToUserAsync(string username, RefreshToken newRefreshToken);
+        Task<bool> UserExists(string username);
     }
 }

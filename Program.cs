@@ -1,11 +1,12 @@
 global using Hangman.Services.UserService;
-using System;
 using System.Text;
 using FluentValidation;
 using Hangman.BusinessLogics;
 using Hangman.Data;
+using Hangman.Extensions;
 using Hangman.Models.RequestModels;
 using Hangman.Profiles;
+using Hangman.Services.AuthManager;
 using Hangman.Services.SessionService;
 using Hangman.Services.WordService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -29,6 +30,7 @@ builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IWordService, WordService>();
+builder.Services.AddScoped<IAuthManager, AuthManager>();
 //BusinessLogic
 builder.Services.AddScoped<IGuessBusinessLogic,GuessBusinessLogic>();
 //Fluent Validation
@@ -54,6 +56,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 
 var app = builder.Build();
+
+app.ConfigureExceptionHandler();
+
+if (app.Environment.IsProduction())
+{
+    app.UseHsts();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

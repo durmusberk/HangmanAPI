@@ -3,12 +3,13 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using FluentValidation.Results;
 using Hangman.BusinessLogics;
+using Hangman.Models.Exceptions;
 using Hangman.Models.RequestModels;
 using Hangman.Models.ResponseModels;
+using Hangman.Services.AuthManager;
 using Hangman.Services.SessionService;
 using Hangman.Services.WordService;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
 
 namespace Hangman.Controllers
 {
@@ -24,9 +25,11 @@ namespace Hangman.Controllers
         private readonly IGuessBusinessLogic _guessBusinessLogic;
         private readonly IValidator<GuessRequestDto> _guessRequestValidator;
         private readonly IValidator<NewGameRequestDto> _newGameValidator;
+        private readonly IAuthManager _authManager;
 
         public HangmanGameController(  IUserService userService,IWordService wordService, ISessionService sessionService, 
-            IGuessBusinessLogic guessBusinessLogic, IValidator<GuessRequestDto> guessRequestValidator, IValidator<NewGameRequestDto> newGameValidator)
+            IGuessBusinessLogic guessBusinessLogic, IValidator<GuessRequestDto> guessRequestValidator, IValidator<NewGameRequestDto> newGameValidator,
+            IAuthManager authManager)
         {
             _userService = userService;
             _wordService = wordService;
@@ -34,6 +37,7 @@ namespace Hangman.Controllers
             _guessBusinessLogic = guessBusinessLogic;
             _guessRequestValidator = guessRequestValidator;
             _newGameValidator = newGameValidator;
+            _authManager = authManager;
         }
         #endregion
 
@@ -42,34 +46,21 @@ namespace Hangman.Controllers
         [HttpPost("Guess")]
         public async Task<ActionResult<GuessResponseModel>> Guess(GuessRequestDto request)
         {
+            await _authManager.CheckTokenValidation(Request);
 
-            var valid = await CheckTokenValidation();
-            if (valid != null)
-            {
-                return valid;
-            }
+            var username = _userService.GetMyName();
+
+            var GameSession = _sessionService.GetSessionForGuess(username,request.GameId);
+
 
             ValidationResult result = await _guessRequestValidator.ValidateAsync(request);
             if (!result.IsValid)
             {
-                result.AddToModelState(ModelState);
-                return BadRequest(ModelState);
+                throw new InvalidRequestException(result);
             }
 
-            var username = _userService.GetMyName();
 
-            var session = _sessionService.GetSession(username,request.GameId);
-
-            if (session == null)
-            {
-                return BadRequest("No Such A Session!");
-            }
-            if (session.IsEnded)
-            {
-                return BadRequest("This Session is Already Ended!");
-            }
-
-            var response = _guessBusinessLogic.GuessBL(request,session);
+            var response = _guessBusinessLogic.GuessBL(request,GameSession);
 
             return Ok(response);
             
@@ -81,21 +72,18 @@ namespace Hangman.Controllers
         [HttpGet("Sessions")]
         public async Task<ActionResult<List<GetSessionsResponseDto>>> GetSessions()
         {
-            var valid = await CheckTokenValidation();
-            if (valid != null)
-            {
-                return valid;
-            }
+            await _authManager.CheckTokenValidation(Request);
 
             var username = _userService.GetMyName();
 
-            
-
             var SessionList = _sessionService.GetAllActiveSessions(username);
 
-            
+            if (SessionList.Any())
+            {
+                return Ok(SessionList);
+            }
 
-            return SessionList.Any() ? Ok(SessionList) : NoContent();
+            throw new SessionNotFoundException();
 
         }
 
@@ -106,20 +94,14 @@ namespace Hangman.Controllers
         [HttpPost("StartNewGame")]
         public async Task<ActionResult<NewGameResponseDto>> StartNewGame(NewGameRequestDto request)
         {
-            var valid = await CheckTokenValidation();
-            if (valid != null)
-            {
-                return valid;
-            }
+            await _authManager.CheckTokenValidation(Request);
 
             ValidationResult result = await _newGameValidator.ValidateAsync(request);
             if (!result.IsValid)
             {
-                result.AddToModelState(ModelState);
-                return BadRequest(ModelState);
+                throw new InvalidRequestException(result);
             }
-            
-            
+
 
             var RandomWord = _wordService.GetRandomWordWithGivenDifficulty(request.Difficulty);
             var UserName = _userService.GetMyName().ToLower();
@@ -152,34 +134,6 @@ namespace Hangman.Controllers
 
         #endregion
 
-        #region Methods
-        private async Task<ActionResult?> CheckTokenValidation()
-        {
-            var refreshToken = Request.Cookies["refreshToken"];
-            var userName = _userService.GetMyName();
-            if (userName.IsNullOrEmpty())
-            {
-                return Unauthorized("Invalid Token or Token Expired!");
-            }
-            
-            var user = await  _userService.GetUserAsync(userName);
-
-            if (user == null)
-            {
-                return BadRequest("NoSuchAUser!");
-            }
-
-            if (!user.RefreshToken.Equals(refreshToken))
-            {
-                return Unauthorized("Invalid Refresh Token.");
-            }
-            else if (user.TokenExpires < DateTime.Now)
-            {
-                return Unauthorized("Token expired.");
-            }
-
-            return null;
-        }
-        #endregion
+        
     }
 }
