@@ -1,8 +1,16 @@
-﻿namespace Hangman.Models.Exceptions
+﻿using Hangman.Models.Exceptions.BaseExceptions;
+
+namespace Hangman.Models.Exceptions
 {
-    public class ExpiredRefreshTokenException : Exception
+    public sealed class ExpiredRefreshTokenException : CustomException
     {
-        public ExpiredRefreshTokenException() : base("Your Token has Expired. Please Login Again!")
-        { }
+        public override int StatusCode { get; set; }
+        public override string Message { get; set; }
+        public ExpiredRefreshTokenException()
+        {
+            StatusCode = StatusCodes.Status419AuthenticationTimeout;
+            Message = "Your Token has Expired. Please Login Again!";
+        }
+
     }
 }

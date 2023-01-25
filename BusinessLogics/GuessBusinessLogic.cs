@@ -10,7 +10,7 @@ namespace Hangman.BusinessLogics
     public class GuessBusinessLogic : IGuessBusinessLogic
     {
         private readonly ISessionService _sessionService;
-        private readonly UnitOfWork _unitOfWork = new UnitOfWork();
+        private readonly UnitOfWork _unitOfWork = new();
 
         public GuessBusinessLogic(ISessionService sessionService)
         {
@@ -79,7 +79,7 @@ namespace Hangman.BusinessLogics
                         IsFinished = true,
                         WrongGuessCount = session.WrongGuessCount,
                         RemainingGuessCount = 0,
-                        Message = "Oops! You have failed. Your Word Was [ " + session.Word + " ]. Let's Start A New Game And Try Again."
+                        Message = $"Oops! You have failed. Your Word Was [{session.Word}]. Let's Start A New Game And Try Again."
                     };
 
                 }

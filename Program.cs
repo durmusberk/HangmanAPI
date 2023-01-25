@@ -4,6 +4,7 @@ using FluentValidation;
 using Hangman.BusinessLogics;
 using Hangman.Data;
 using Hangman.Extensions;
+using Hangman.Middlewares;
 using Hangman.Models.RequestModels;
 using Hangman.Profiles;
 using Hangman.Services.AuthManager;
@@ -12,7 +13,7 @@ using Hangman.Services.WordService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +24,12 @@ builder.Services.AddDbContext<ApplicationDbContext>(option =>
 {
     option.UseSqlServer(builder.Configuration.GetConnectionString("DefaultSQLConnection"));
 }, ServiceLifetime.Singleton);
+
+//Configure Logger
+Log.Logger = new LoggerConfiguration().WriteTo.Console().WriteTo.File("log/HangmanLogs.txt", rollingInterval: RollingInterval.Hour).CreateLogger();
+
+builder.Host.UseSerilog();
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
@@ -57,7 +64,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 var app = builder.Build();
 
-app.ConfigureExceptionHandler();
+//app.ConfigureExceptionHandler();
+app.UseMiddleware<ExceptionHandlerMiddleware>();
 
 if (app.Environment.IsProduction())
 {

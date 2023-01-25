@@ -1,4 +1,4 @@
-﻿namespace Hangman
+﻿namespace Hangman.Models
 {
     public class RefreshToken
     {

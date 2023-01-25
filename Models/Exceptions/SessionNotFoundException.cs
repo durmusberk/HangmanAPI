@@ -2,15 +2,19 @@
 
 namespace Hangman.Models.Exceptions
 {
-    public sealed class SessionNotFoundException : NotFoundException
+    public sealed class SessionNotFoundException : CustomException
     {
+        public override int StatusCode { get; set; }
+        public override string Message { get; set; }
         public SessionNotFoundException(int id)
-            : base($"Session with {id} does not exists.")
         {
+            StatusCode = StatusCodes.Status404NotFound;
+            Message = $"Session with {id} does not exists.";
         }
         public SessionNotFoundException()
-            : base($"No Session Found!")
         {
+            StatusCode = StatusCodes.Status404NotFound;
+            Message = "No Session Found!";
         }
     }
 }

@@ -1,7 +1,15 @@
-﻿namespace Hangman.Models.Exceptions
+﻿using Hangman.Models.Exceptions.BaseExceptions;
+
+namespace Hangman.Models.Exceptions
 {
-    public class SessionAlreadyEndedException : Exception
+    public sealed class SessionAlreadyEndedException : CustomException
     {
-        public SessionAlreadyEndedException(int id) :base($"Session with {id} Game Id is Already Ended!") { }
+        public override int StatusCode { get; set; }
+        public override string Message { get; set; }
+        public SessionAlreadyEndedException(int id)
+        {
+            StatusCode = StatusCodes.Status303SeeOther;
+            Message = $"Session with {id} Game Id is Already Ended!";
+        }
     }
 }
